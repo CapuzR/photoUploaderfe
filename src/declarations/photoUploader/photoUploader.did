@@ -1,0 +1,69 @@
+type WriteAsset = 
+ variant {
+   Chunk: record {
+            callback: opt Callback;
+            chunk: blob;
+            id: text;
+          };
+   Init: record {
+           callback: opt Callback;
+           id: text;
+           size: nat;
+         };
+ };
+type StreamingCallbackToken = 
+ record {
+   content_encoding: text;
+   index: nat;
+   key: text;
+ };
+type StreamingCallbackResponse = 
+ record {
+   body: blob;
+   token: opt StreamingCallbackToken;
+ };
+type Result = 
+ variant {
+   err: Error;
+   ok;
+ };
+type Hub = 
+ service {
+   assetRequest: (AssetRequest) -> (Result);
+   listAssets: () -> (vec record {
+                            text;
+                            text;
+                            nat;
+                          }) query;
+   staticStreamingCallback: (StreamingCallbackToken) ->
+    (StreamingCallbackResponse) query;
+ };
+type Error = 
+ variant {
+   AuthorizedPrincipalLimitReached: nat;
+   FailedToWrite: text;
+   Immutable;
+   InvalidRequest;
+   NotFound;
+   Unauthorized;
+ };
+type Callback = func () -> ();
+type AssetRequest = 
+ variant {
+   Put:
+    record {
+      callback: opt Callback;
+      contentType: text;
+      key: text;
+      payload: variant {
+                 Payload: blob;
+                 StagedData;
+               };
+    };
+   Remove: record {
+             callback: opt Callback;
+             key: text;
+           };
+   StagedWrite: WriteAsset;
+ };
+service : () -> Hub
