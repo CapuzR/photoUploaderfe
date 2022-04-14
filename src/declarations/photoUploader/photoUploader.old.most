@@ -1,0 +1,6 @@
+type Key = Text;
+type StableAsset = {content_type : Text; encodings : [(Text, AssetEncoding)]};
+actor {
+  stable var stableAssets : [(Key, StableAsset)];
+  stable var stableAuthorized : [Principal]
+};

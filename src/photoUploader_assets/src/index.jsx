@@ -1,74 +1,100 @@
 import { photoUploader } from "../../declarations/photoUploader";
-import * as React from 'react'
+import { idlFactory } from "../../../.dfx/local/canisters/assets";
+import * as React from 'react';
 import ReactDOM from 'react-dom';
-import { Button, Grid } from '@mui/material';
+import { Button, Grid, TextField } from '@mui/material';
 import { useState, useEffect } from "react";
 import { readAndCompressImage } from 'browser-image-resizer';
 import { encode, decode } from 'uint8-to-base64';
-
-// Interact with foo actor, calling the greet method
-// const greeting = await photoUploader.greet(name);
-
-
-export const convertToBase64 = (blob) => {
-  return new Promise((resolve) => {
-    var reader = new FileReader();
-    reader.onload = function () {
-      resolve(reader.result);
-    };
-    reader.readAsDataURL(blob);
-  });
-};
+import PlugConnect from '@psychedelic/plug-connect';
+const network =
+  process.env.DFX_NETWORK ||
+  (process.env.NODE_ENV === "production" ? "ic" : "local");
+const host = network != "ic" ? "http://localhost:8080" : "https://mainnet.dfinity.network";
+const canisterId = 'rkp4c-7iaaa-aaaaa-aaaca-cai';
+const whitelist = ['rkp4c-7iaaa-aaaaa-aaaca-cai'];
 
 export default function Uploader() {
-  const [image, setImage] = useState("https://via.placeholder.com/300.png/09f/fff");
+  const [image, setImage] = useState("https://via.placeholder.com/300.png/09f/fff");  
+  const [ fileName, setFileName ] = useState();
 
-  useEffect(async () => {
-    const lol = await photoUploader.staticStreamingCallback({ key: "0", index: 0, content_encoding: "" });
-    console.log(lol);
-    const encoded = encode(lol.body);
-    console.log("encoded", "data:image/jpeg;base64,".concat(encoded));
-    // console.log(await convertToBase64(lol.body));
+  const handleShow = async (e) => {
+    const assetActor = await window.ic.plug.createActor({
+      canisterId: canisterId,
+      interfaceFactory: idlFactory
+    });
+
+    const asset = await assetActor.get({
+      key: fileName,
+      accept_encodings: ["identity"]
+    });
+    
+    const chunksQty = Math.ceil(parseInt(asset.total_length)/500000);
+    let fullAsset = [];
+
+    for (let i=0; i<chunksQty; i++) {
+      const chunk = await assetActor.get_chunk({
+        key: fileName,
+        content_encoding: "identity",
+        index: i,
+        sha256: []
+      });
+      fullAsset = fullAsset.concat(chunk.content);
+    }
+    
+    const encoded = encode(fullAsset);
     setImage("data:image/jpeg;base64," + encoded);
-  }, []);
+  };
 
   const handleChange = async (e) => {
     const file = e.target.files[0];
+    const assetActor = await window.ic.plug.createActor({
+      canisterId: canisterId,
+      interfaceFactory: idlFactory
+    });
+    const chunkSize = 500000;
+    const clone = [...new Uint8Array(await file.arrayBuffer())];
+    const batchId = await assetActor.create_batch({});
+    const chunkIds = [];
 
-    const config = {
-      quality: 1,
-      maxWidth: 200,
-      maxHeight: 200,
-      autoRotate: true,
-      debug: true
-    };
-    let resizedImage = await readAndCompressImage(file, config);
-
-    const resizedString = await convertToBase64(file);
-    console.log(resizedString);
-
-    const data = [...new Uint8Array(await file.arrayBuffer())];
-    setImage(resizedString);
-    console.log(resizedString);
-
-    const co = {
-      Put: {
-        key: "0",
-        contentType: "image/jpeg",
-        payload: {
-          Payload: data
-        },
-        callback: []
-      }
-    };
-    console.log(photoUploader);
-    console.log(await photoUploader.assetRequest(co));
-
+    for (let i = 0; i < clone.length; i += chunkSize) {
+      const chunk = clone.slice(i, i + chunkSize);
+      const chunkId = await assetActor.create_chunk({
+        batch_id: parseInt(batchId.batch_id), 
+        content: chunk
+      });
+      chunkIds.push(
+        parseInt(chunkId.chunk_id)
+      );
+    }
+    await assetActor.commit_batch({
+      batch_id: parseInt(batchId.batch_id),
+      operations: [{
+        CreateAsset: {
+          key: file.name,
+          content_type: "image/jpeg",
+        }
+      },{
+        SetAssetContent: {
+          key: file.name,
+          sha256: [],
+          chunk_ids: chunkIds,
+          content_encoding: "identity",
+        }
+      }]
+    });
   };
 
   return (
     <div>
-      <Grid container>
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <PlugConnect
+            whitelist={whitelist}
+            onConnectCallback={() => console.log("Connected joe")}
+            host= {host}
+          />
+        </Grid>
         <Grid item xs={12}>
           <Button
             variant="contained"
@@ -80,9 +106,29 @@ export default function Uploader() {
               type="file"
               hidden
               accept="image/jpeg"
-              onChange={handleChange}
+              onChange={(e)=>{handleChange(e)}}
             />
           </Button>
+        </Grid>
+        <Grid item xs={4}>
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <TextField 
+                value={fileName}
+                onChange={(e)=>{setFileName(e.target.value)}}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <Button
+                variant="contained"
+                component="label"
+                onClick={(e)=>{handleShow(e)}}
+                style={{ backgroundColor: "#2d2d2d" }}
+              >
+                Show asset
+              </Button>
+            </Grid>
+          </Grid>
         </Grid>
         <Grid item xs={12}>
           <img

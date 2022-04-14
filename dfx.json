@@ -1,12 +1,16 @@
 {
   "canisters": {
     "photoUploader": {
-      "main": "./src/photoUploader/main.mo",
+      "main": "./src/chunkTest/assetCanister.mo",
       "type": "motoko"
+    },
+    "assets": {
+      "type": "assets"
     },
     "photoUploader_assets": {
       "dependencies": [
-        "photoUploader"
+        "photoUploader",
+        "assets"
       ],
       "frontend": {
         "entrypoint": "src/photoUploader_assets/src/index.html"
@@ -21,12 +25,12 @@
   "defaults": {
     "build": {
       "args": "",
-      "packtool": ""
+      "packtool": "vessel sources"
     }
   },
-  "dfx": "0.8.4",
+  "dfx": "0.9.2",
   "networks": {
-    "local": { 
+    "local": {
       "bind": "127.0.0.1:8000",
       "type": "ephemeral"
     }

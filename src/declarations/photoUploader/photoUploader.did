@@ -1,69 +1,138 @@
-type WriteAsset = 
- variant {
-   Chunk: record {
-            callback: opt Callback;
-            chunk: blob;
-            id: text;
-          };
-   Init: record {
-           callback: opt Callback;
-           id: text;
-           size: nat;
-         };
+type UnsetAssetContentArguments = 
+ record {
+   content_encoding: text;
+   key: Key;
  };
+type Time = int;
+type StreamingStrategy = variant {
+                           Callback:
+                            record {
+                              callback:
+                               func (StreamingCallbackToken) ->
+                                (StreamingCallbackHttpResponse) query;
+                              token: StreamingCallbackToken;
+                            };};
 type StreamingCallbackToken = 
  record {
    content_encoding: text;
    index: nat;
    key: text;
+   sha256: opt vec nat8;
  };
-type StreamingCallbackResponse = 
+type StreamingCallbackHttpResponse = 
  record {
-   body: blob;
+   body: vec nat8;
    token: opt StreamingCallbackToken;
  };
-type Result = 
- variant {
-   err: Error;
-   ok;
+type SetAssetContentArguments = 
+ record {
+   chunk_ids: vec ChunkId;
+   content_encoding: text;
+   key: Key;
+   sha256: opt vec nat8;
  };
-type Hub = 
+type Path = text;
+type Key = text;
+type HttpResponse = 
+ record {
+   body: vec nat8;
+   headers: vec HeaderField;
+   status_code: nat16;
+   streaming_strategy: opt StreamingStrategy;
+ };
+type HttpRequest = 
+ record {
+   body: vec nat8;
+   headers: vec HeaderField;
+   method: text;
+   url: text;
+ };
+type HeaderField = 
+ record {
+   text;
+   text;
+ };
+type DeleteAssetArguments = record {key: Key;};
+type CreateAssetArguments = 
+ record {
+   content_type: text;
+   key: Key;
+ };
+type Contents = vec nat8;
+type CommitBatchArguments = 
+ record {
+   batch_id: BatchId;
+   operations: vec BatchOperationKind;
+ };
+type ClearArguments = record {};
+type ChunkId = nat;
+type BatchOperationKind = 
+ variant {
+   Clear: ClearArguments;
+   CreateAsset: CreateAssetArguments;
+   DeleteAsset: DeleteAssetArguments;
+   SetAssetContent: SetAssetContentArguments;
+   UnsetAssetContent: UnsetAssetContentArguments;
+ };
+type BatchId = nat;
+type Assets = 
  service {
-   assetRequest: (AssetRequest) -> (Result);
-   listAssets: () -> (vec record {
-                            text;
-                            text;
-                            nat;
-                          }) query;
-   staticStreamingCallback: (StreamingCallbackToken) ->
-    (StreamingCallbackResponse) query;
+   authorize: (principal) -> ();
+   clear: (ClearArguments) -> ();
+   commit_batch: (CommitBatchArguments) -> ();
+   create_asset: (CreateAssetArguments) -> ();
+   create_batch: (record {}) -> (record {batch_id: BatchId;});
+   create_chunk: (record {
+                    batch_id: BatchId;
+                    content: vec nat8;
+                  }) -> (record {chunk_id: ChunkId;});
+   delete_asset: (DeleteAssetArguments) -> ();
+   get: (record {
+           accept_encodings: vec text;
+           key: Key;
+         }) ->
+    (record {
+       content: vec nat8;
+       content_encoding: text;
+       content_type: text;
+       sha256: opt vec nat8;
+       total_length: nat;
+     }) query;
+   getCanisterId: () -> (principal) query;
+   get_chunk:
+    (record {
+       content_encoding: text;
+       index: nat;
+       key: Key;
+       sha256: opt vec nat8;
+     }) -> (record {content: vec nat8;}) query;
+   http_request: (HttpRequest) -> (HttpResponse) query;
+   http_request_streaming_callback: (StreamingCallbackToken) ->
+    (StreamingCallbackHttpResponse) query;
+   list: (record {}) -> (vec AssetDetails) query;
+   retrieve: (Path) -> (Contents) query;
+   set_asset_content: (SetAssetContentArguments) -> ();
+   store:
+    (record {
+       content: vec nat8;
+       content_encoding: text;
+       content_type: text;
+       key: Key;
+       sha256: opt vec nat8;
+     }) -> ();
+   unset_asset_content: (UnsetAssetContentArguments) -> ();
  };
-type Error = 
- variant {
-   AuthorizedPrincipalLimitReached: nat;
-   FailedToWrite: text;
-   Immutable;
-   InvalidRequest;
-   NotFound;
-   Unauthorized;
+type AssetEncodingDetails = 
+ record {
+   content_encoding: text;
+   length: nat;
+   modified: Time;
+   sha256: opt vec nat8;
  };
-type Callback = func () -> ();
-type AssetRequest = 
- variant {
-   Put:
-    record {
-      callback: opt Callback;
-      contentType: text;
-      key: text;
-      payload: variant {
-                 Payload: blob;
-                 StagedData;
-               };
-    };
-   Remove: record {
-             callback: opt Callback;
-             key: text;
-           };
-   StagedWrite: WriteAsset;
+type AssetDetails = 
+ record {
+   content_type: text;
+   encodings: vec AssetEncodingDetails;
+   key: Key;
  };
-service : () -> Hub
+service : () -> Assets
